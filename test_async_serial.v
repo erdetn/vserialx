@@ -1,10 +1,3 @@
-# vasyncserial
-Tiny wrapper for serial communication in V.
-Tested only on `Linux ex270 5.11.0-27-generic #29~20.04.1-Ubuntu x86_64 x86_64 x86_64 GNU/Linux`.
-
-## Usage
-
-```
 module main
 
 import time
@@ -47,14 +40,3 @@ fn main() {
 
 	tty_port.close()
 }
-```
-
-## TODO features
-- Exclusive access (locing and unlocking mechanism).
-- Reading configurations using `tcgetattr` and `ioctl`.
-- Better error/return code naming
-- The documentation
-
-## TODO testings
-- Other serial port configurations need to be tested.
-- Bloking read/write need to be tested.
