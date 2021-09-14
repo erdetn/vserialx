@@ -73,23 +73,22 @@ pub enum Baudrate {
 }
 
 pub enum AsyncSerialReturn {
-	tty_device
-	not_tty_device     // C.ENOTTY
-	config_failed
-	bps_mismatch
-	not_open
-	unknown_error
-	no_error
-	bad_fd             // C.EBADF
-	no_address         // C.EDESTADDRREQ
-	buffer_fault       // C.EFAULT
-	buffer_overlimit   // C.EFBIG
-	interrupted        // C.EINTR
-	invalid_parameters // C.EINVAL
-	io_error           // C.EINVAL
-	no_space           // C.ENOSPC
-	not_permitted      // C.EPERM
-	closed_pipe        // C.EPIPE
+	okay
+
+	error_not_tty
+	error_configuration_failed
+	error_baudrate_mismatch
+	error_port_not_open
+	error_unknown
+	error_bad_file_descriptor
+	error_buffer_fault
+	error_buffer_overlimit
+	error_interrupted
+	error_invalid_parameters
+	error_io
+	error_no_space
+	error_no_permission
+	error_closed_pipe
 }
 
 pub enum Parity {
@@ -185,7 +184,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	if rc != 1 {
 		vlogd('Not a tty device.')
 		this.close()
-		return AsyncSerialReturn.not_tty_device
+		return AsyncSerialReturn.error_not_tty
 	}
 
 	if this.lock_port == true {
@@ -195,7 +194,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	}
  
 	rc = int(this.flush())
-	if rc != int(AsyncSerialReturn.no_error) {
+	if rc != int(AsyncSerialReturn.okay) {
 		vlogd('Failed to flush (${rc}).')
 	}
 
@@ -204,7 +203,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
   	if rc != 0 {
     	vlogd("Failed to get settings (${rc}).")
     	this.close()
-		return AsyncSerialReturn.unknown_error
+		return AsyncSerialReturn.error_unknown
     }
 
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
@@ -239,7 +238,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	C.cfsetispeed(&options, int(this.baud_rate))
 	if int(C.cfgetospeed(&options)) != int(this.baud_rate) {
 		vlogd('Baud rate is not set.')
-		return AsyncSerialReturn.bps_mismatch
+		return AsyncSerialReturn.error_baudrate_mismatch
 	}
 
 	// set CFLAG
@@ -313,10 +312,10 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	if rc != 0 {
 		vlogd('Failed to set final configuration (${rc})')
 		this.close()
-		return AsyncSerialReturn.config_failed
+		return AsyncSerialReturn.error_configuration_failed
 	}
 	
-	return AsyncSerialReturn.no_error
+	return AsyncSerialReturn.okay
 }
 
 pub fn (mut this AsyncSerial)close() {
@@ -351,7 +350,7 @@ fn (mut this AsyncSerial)read_ex(maxbytes int) (int, []byte, AsyncSerialReturn){
 			return 1, [byte(0)], this.get_error(nbytes)
 		}
 		buf[nbytes] = 0
-		return nbytes, buf.vbytes(nbytes), AsyncSerialReturn.no_error
+		return nbytes, buf.vbytes(nbytes), AsyncSerialReturn.okay
 	}
 }
 
@@ -370,7 +369,7 @@ pub fn (mut this AsyncSerial)write(package string) (u32, AsyncSerialReturn){
 	rc := int(C.write(this.fd, package.str, usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), AsyncSerialReturn.no_error
+		return u32(rc), AsyncSerialReturn.okay
 	}
 
 	error := this.get_error(rc)
@@ -381,7 +380,7 @@ pub fn (mut this AsyncSerial)write_raw(package []byte) (u32, AsyncSerialReturn){
 	rc := int(C.write(this.fd, voidptr(&package[0]), usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), AsyncSerialReturn.no_error
+		return u32(rc), AsyncSerialReturn.okay
 	}
 
 	error := this.get_error(rc)
@@ -406,37 +405,37 @@ pub fn (mut this AsyncSerial)flush() AsyncSerialReturn{
 pub fn (mut this AsyncSerial)get_error(error_code int) AsyncSerialReturn {
 	return match  error_code {
 		C.EBADF {
-			AsyncSerialReturn.bad_fd
+			AsyncSerialReturn.error_bad_file_descriptor
 		}
 		C.EDESTADDRREQ {
 			AsyncSerialReturn.no_address
 		}
 		C.EFAULT {
-			AsyncSerialReturn.buffer_fault
+			AsyncSerialReturn.error_buffer_fault
 		}
 		C.EFBIG {
-			AsyncSerialReturn.buffer_overlimit
+			AsyncSerialReturn.error_buffer_overlimit
 		}
 		C.EINTR{
-			AsyncSerialReturn.interrupted
+			AsyncSerialReturn.error_interrupted
 		}
 		C.EINVAL{
-			AsyncSerialReturn.invalid_parameters
+			AsyncSerialReturn.error_invalid_parameters
 		}
 		C.EIO {
-			AsyncSerialReturn.io_error
+			AsyncSerialReturn.error_io
 		}
 		C.ENOSPC {
-			AsyncSerialReturn.no_space
+			AsyncSerialReturn.error_no_space
 		}
 		C.EPERM{
-			AsyncSerialReturn.not_permitted
+			AsyncSerialReturn.error_no_permission
 		}
 		C.EPIPE {
-			AsyncSerialReturn.closed_pipe
+			AsyncSerialReturn.error_closed_pipe
 		}
 		else {
-			AsyncSerialReturn.unknown_error
+			AsyncSerialReturn.error_unknown
 		}
 	}
 }
