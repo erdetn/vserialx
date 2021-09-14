@@ -72,6 +72,11 @@ pub enum Baudrate {
 	bps_115200 = C.B115200 // 115,200 [bps]
 }
 
+const c_baudrates = [0 50 75 110 134 150 
+					200	300 600 1200 1800 
+					2400 4800 9600 7200 14400 
+					19200 28800 38400]
+
 pub enum AsyncSerialReturn {
 	okay
 
@@ -453,6 +458,31 @@ pub fn (mut this AsyncSerial)unlock_access() {
 
 pub fn (mut this AsyncSerial)is_locked() bool {
 	return this.lock_port
+}
+
+pub fn (mut this AsyncSerial)get_baudrate() ?int {
+	mut tx_baudrate := int(0)
+	mut rx_baudrate := int(0)
+	mut options := C.termios{}
+
+
+	rc := int(C.tcgetattr(this.fd, &options))
+  	if rc != 0 {
+		return error('Failed to get options.')
+    }
+
+	tx_baudrate = C.cfgetospeed(&options)
+	rx_baudrate = C.cfgetispeed(&options)
+
+	if tx_baudrate != rx_baudrate {
+		return error('Baudrate mismatch.')
+	}
+
+	if tx_baudrate > 13 || rx_baudrate > 13 {
+		return error('Unknown baudrate.')
+	}
+
+	return c_baudrates[tx_baudrate]
 }
 
 [inline]

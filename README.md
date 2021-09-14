@@ -50,7 +50,7 @@ fn main() {
 ```
 
 ## TODO features
-- Exclusive access (locking and unlocking mechanism).
+[+] Exclusive access (locking and unlocking mechanism).
 - Reading configurations using `tcgetattr` and `ioctl`.
 [+] Better error/return code naming
 - The documentation
