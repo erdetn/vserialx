@@ -89,6 +89,7 @@ pub enum AsyncSerialReturn {
 	error_no_space
 	error_no_permission
 	error_closed_pipe
+	error_no_address
 }
 
 pub enum Parity {
@@ -408,7 +409,7 @@ pub fn (mut this AsyncSerial)get_error(error_code int) AsyncSerialReturn {
 			AsyncSerialReturn.error_bad_file_descriptor
 		}
 		C.EDESTADDRREQ {
-			AsyncSerialReturn.no_address
+			AsyncSerialReturn.error_no_address
 		}
 		C.EFAULT {
 			AsyncSerialReturn.error_buffer_fault
@@ -438,6 +439,20 @@ pub fn (mut this AsyncSerial)get_error(error_code int) AsyncSerialReturn {
 			AsyncSerialReturn.error_unknown
 		}
 	}
+}
+
+pub fn (mut this AsyncSerial)lock_access() {
+	this.lock_port = true
+	C.ioctl(this.fd, C.TIOCEXCL,  0)
+}
+
+pub fn (mut this AsyncSerial)unlock_access() {
+	this.lock_port = false
+	C.ioctl(this.fd, C.TIOCGEXCL,  0)
+}
+
+pub fn (mut this AsyncSerial)is_locked() bool {
+	return this.lock_port
 }
 
 [inline]
