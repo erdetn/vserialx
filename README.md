@@ -29,9 +29,9 @@ fn main() {
 		return
 	}
 
-	len, error := tty_port.write('Hello world.\n\n')
-	//len, error := tty_port.write_raw([byte(0x31), 0x32, 0x33, 0x0A])
-	println('write_raw: ${len} bytes, ${error}')
+	len, error := tty_port.write_string('Hello world.\n\n')
+	//len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
+	println('write_buffer: ${len} bytes, ${error}')
 	time.sleep(100000)
 	
 	for{
@@ -51,9 +51,9 @@ fn main() {
 
 ## TODO features
 [+] Exclusive access (locking and unlocking mechanism).
-- Reading configurations using `tcgetattr` and `ioctl`.
+[+] Reading configurations using `tcgetattr` and `ioctl`. Read only the baudrate for now.
 [+] Better error/return code naming
-- The documentation
+[+] The documentation
 
 ## TODO testings
 - Other serial port configurations need to be tested.

@@ -8,11 +8,11 @@ fn main() {
 
 	// mut tty_port := asyncserial.new_default(tty_port_name)
 	mut tty_port := asyncserial.new(tty_port_name,
-									.bps_9600, 
-									.no_flow_control,
-									.none_parity,
-									.stop_bit_1,
-									.char_size_8b)
+								.bps_9600, 
+								.no_flow_control,
+								.none_parity,
+								.stop_bit_1,
+								.char_size_8b)
 
 	ret := tty_port.open()
 
@@ -22,13 +22,13 @@ fn main() {
 		return
 	}
 
-	len, error := tty_port.write('Hello world.\n\n')
-	//len, error := tty_port.write_raw([byte(0x31), 0x32, 0x33, 0x0A])
-	println('write_raw: ${len} bytes, ${error}')
+	len, error := tty_port.write_string('Hello world.\n\n')
+	//len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
+	println('write_string: ${len} bytes, ${error}')
 	time.sleep(100000)
 	
 	for{
-		rx_bytes := tty_port.has_data()
+		rx_bytes := tty_port.available_bytes()
 		time.sleep(10000)
 		if rx_bytes > 0 {
 			nbytes, buff, _ := tty_port.read(100)

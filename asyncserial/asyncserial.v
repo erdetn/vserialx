@@ -142,6 +142,8 @@ mut:
 	timeout        u32  = 100 // [ms]
 }
 
+// new_default allocates a serial port with baudrate of 9600, no flow control,
+// no parity, stop bit 1 and character size of 8 bits.
 pub fn new_default(port_name string) AsyncSerial {
 	this := AsyncSerial {
 		fd:             -1
@@ -156,6 +158,8 @@ pub fn new_default(port_name string) AsyncSerial {
 	return this
 }
 
+// new requires port name, baudrate, flow control, parity, stop bits and the character size
+// as inputs, in order to allocate the serial port.
 pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
 		   parity Parity, stop_bit StopBit, char_size CharacterSize) AsyncSerial {
 	this := AsyncSerial {
@@ -171,6 +175,8 @@ pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
 	return this
 }
 
+// open the serial port and configure it (if it is able to open the port).
+// Returns enum of the type AsyncSerialReturn.
 pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 
 	mut open_flag := u32(C.O_RDWR | C.O_NOCTTY)
@@ -324,6 +330,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	return AsyncSerialReturn.okay
 }
 
+// close the serial port.
 pub fn (mut this AsyncSerial)close() {
 	if this.is_connected == false {
 		return
@@ -333,11 +340,13 @@ pub fn (mut this AsyncSerial)close() {
 	C.close(this.fd)
 }
 
+// connected returns true if the serial port is open (connected)
 pub fn (mut this AsyncSerial) connected() bool {
 	return this.is_connected
 }
 
-pub fn (mut this AsyncSerial)has_data() u32 {
+// available_bytes return number of availbale bytes in the input buffer.
+pub fn (mut this AsyncSerial)available_bytes() u32 {
 	mut bytes_available := u32(0)
 
 	rc := C.ioctl(this.fd, C.FIONREAD, &bytes_available)
@@ -347,31 +356,48 @@ pub fn (mut this AsyncSerial)has_data() u32 {
 	return u32(bytes_available)
 }
 
-fn (mut this AsyncSerial)read_ex(maxbytes int) (int, []byte, AsyncSerialReturn){
+// has_data returns true if there are byte(s) available in the input buffer
+// otherwise, returns false
+pub fn (mut this AsyncSerial)has_data() bool {
+	return this.available_bytes() > 0
+}
+
+// read received bytes and returns:
+// number of received bytes (0 if no bytes avalable), 
+// read buffer - an empty buffer if no data, or an array of received bytes
+// and the enum of type AsyncSerialReturn.
+pub fn (mut this AsyncSerial)read(maxbytes int) (int, []byte, AsyncSerialReturn){
+	C.fcntl(this.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
 		nbytes := C.read(this.fd, buf, maxbytes)
 		if nbytes < 0 {
 			free(buf)
-			return 1, [byte(0)], this.get_error(nbytes)
+			return 0, []byte{len: 0}, this.get_error(nbytes)
 		}
 		buf[nbytes] = 0
 		return nbytes, buf.vbytes(nbytes), AsyncSerialReturn.okay
 	}
 }
 
-pub fn (mut this AsyncSerial)read(maxbytes int)(int, []byte, AsyncSerialReturn){
-	C.fcntl(this.fd, C.F_SETFL, C.FNDELAY)
+// read converts received bytes to a sting and returns:
+// number of recieved bytes (0 if no data received),
+// received string and the enum type of AsyncSerialReturn.
+pub fn (mut this AsyncSerial)read_string() (int, string, AsyncSerialReturn) {
+	ncount, buffer, rc := this.read(max_read_buffer)
 
-	return this.read_ex(maxbytes)
+	mut rx_str := ''
+	if ncount > 0 {
+		rx_str = buffer.bytestr()
+	}
+
+	return ncount, rx_str, rc
 }
 
-pub fn (mut this AsyncSerial)wait_reading(maxbytes int) (int, []byte, AsyncSerialReturn){
-	C.fcntl(this.fd, C.F_SETFL, 0)
-	return this.read_ex(maxbytes)
-}
-
-pub fn (mut this AsyncSerial)write(package string) (u32, AsyncSerialReturn){
+// write_string sends a string and
+// returns number of bytes that are sent and
+// enum type from AsyncSerialReturn.
+pub fn (mut this AsyncSerial)write_string(package string) (u32, AsyncSerialReturn){
 	rc := int(C.write(this.fd, package.str, usize(package.len)))
 	
 	if rc > 0 {
@@ -382,7 +408,10 @@ pub fn (mut this AsyncSerial)write(package string) (u32, AsyncSerialReturn){
 	return 0, error
 }
 
-pub fn (mut this AsyncSerial)write_raw(package []byte) (u32, AsyncSerialReturn){
+// write sends a byte array.
+// Returns: number of written data and
+// enum type from AsyncSerialReturn.
+pub fn (mut this AsyncSerial)write(package []byte) (u32, AsyncSerialReturn){
 	rc := int(C.write(this.fd, voidptr(&package[0]), usize(package.len)))
 	
 	if rc > 0 {
@@ -393,16 +422,22 @@ pub fn (mut this AsyncSerial)write_raw(package []byte) (u32, AsyncSerialReturn){
 	return 0, error
 }
 
+// flush_write removes received unread data
+// Returns enum type from AsyncSerialReturn.
 pub fn (mut this AsyncSerial)flush_read() AsyncSerialReturn{
 	rc := C.tcflush(this.fd, C.TCIFLUSH)
 	return this.get_error(rc)
 }
 
-pub fn (mut this AsyncSerial)flush_write() AsyncSerialReturn {
+// flush_write removes written data that are not sent.
+// Returns enum type from AsyncSerialReturn.
+pub fn (mut this AsyncSerial)flush_write_string() AsyncSerialReturn {
 	rc := C.tcflush(this.fd, C.TCOFLUSH)
 	return this.get_error(rc)
 }
 
+// flush removes both written data that are not sent and
+// received unread data, and returns enum type from AsyncSerialReturn.
 pub fn (mut this AsyncSerial)flush() AsyncSerialReturn{
 	rc := C.tcflush(this.fd, C.TCIOFLUSH)
 	return this.get_error(rc)
@@ -446,20 +481,27 @@ pub fn (mut this AsyncSerial)get_error(error_code int) AsyncSerialReturn {
 	}
 }
 
+// unlock_access acquires exclusive access of this serial port.
 pub fn (mut this AsyncSerial)lock_access() {
 	this.lock_port = true
 	C.ioctl(this.fd, C.TIOCEXCL,  0)
 }
 
+// unlock_access removes exclusive access of this serial port.
 pub fn (mut this AsyncSerial)unlock_access() {
 	this.lock_port = false
 	C.ioctl(this.fd, C.TIOCGEXCL,  0)
 }
 
+// is_locked checks if exclusive access is locked or not.
+// Returns boolean: true if it is locked, otherwise false.
 pub fn (mut this AsyncSerial)is_locked() bool {
 	return this.lock_port
 }
 
+// get_baudrate reads actual (configured) baudrate.
+// Return baudrate in bits-per-seconds, or it returns
+// an error if it fails.
 pub fn (mut this AsyncSerial)get_baudrate() ?int {
 	mut tx_baudrate := int(0)
 	mut rx_baudrate := int(0)
