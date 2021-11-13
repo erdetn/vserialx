@@ -1,18 +1,20 @@
+// Copyright (c) 2021 Erdet Nasufi, MIT License
+
 module main
 
 import time
-import asyncserial
+import vserialx
 
 fn main() {
 	tty_port_name := '/dev/ttyUSB0'
 
-	// mut tty_port := asyncserial.new_default(tty_port_name)
-	mut tty_port := asyncserial.new(tty_port_name,
-								.bps_9600, 
-								.no_flow_control,
-								.none_parity,
-								.stop_bit_1,
-								.char_size_8b)
+	// mut tty_port := vserialx.new_default(tty_port_name)
+	mut tty_port := vserialx.new(tty_port_name,
+					.bps_9600, 
+					.no_flow_control,
+					.none_parity,
+					.stop_bit_1,
+					.char_size_8b)
 
 	ret := tty_port.open()
 
@@ -23,11 +25,11 @@ fn main() {
 	}
 
 	len, error := tty_port.write_string('Hello world.\n\n')
-	//len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
+	// len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
 	println('write_string: ${len} bytes, ${error}')
 	time.sleep(100000)
 	
-	for{
+	for {
 		rx_bytes := tty_port.available_bytes()
 		time.sleep(10000)
 		if rx_bytes > 0 {

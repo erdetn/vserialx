@@ -1,4 +1,6 @@
-module asyncserial
+// Copyright (c) 2021 Erdet Nasufi, MIT License
+
+module vserialx
 
 #flag -I /usr/include/
 #flag -I /usr/include/x86_64-linux-gnu/
@@ -15,14 +17,14 @@ module asyncserial
 
 struct C.termios {
 mut:
-	c_iflag u32
-    c_oflag u32
-    c_cflag u32
-    c_lflag u32
-    c_line byte
-    c_cc[32]byte
-    c_ispeed u32
-    c_ospeed u32
+	c_iflag  u32
+	c_oflag  u32
+	c_cflag  u32
+	c_lflag  u32
+	c_line   byte
+	c_cc[32] byte
+	c_ispeed u32
+	c_ospeed u32
 }
 
 fn C.open(&char, u32) int
@@ -54,7 +56,7 @@ const (
 pub enum Baudrate {
 	bps_0      = C.B0      // 0  [bps]
 	bps_50     = C.B50     // 50 [bps]
-	bps_75     = C.B75	   // 75 [bps]
+	bps_75     = C.B75     // 75 [bps]
 	bps_110    = C.B110    // 110 [bps]
 	bps_134    = C.B134    // 134.5 [bps]
 	bps_150    = C.B150    // 150 [bps]
@@ -73,13 +75,12 @@ pub enum Baudrate {
 }
 
 const c_baudrates = [0 50 75 110 134 150 
-					200	300 600 1200 1800  
-					2400 4800 9600 7200 14400 
-					19200 28800 38400]
+			200 300 600 1200 1800  
+			2400 4800 9600 7200 14400 
+			19200 28800 38400]
 
-pub enum AsyncSerialReturn {
+pub enum SerialXReturn {
 	okay
-
 	error_not_tty
 	error_configuration_failed
 	error_baudrate_mismatch
@@ -121,7 +122,7 @@ pub enum CharacterSize {
 	char_size_8b
 }
 
-pub struct AsyncSerial {
+pub struct SerialX {
 mut:
 	fd             int
 	port_name      string
@@ -144,15 +145,15 @@ mut:
 
 // new_default allocates a serial port with baudrate of 9600, no flow control,
 // no parity, stop bit 1 and character size of 8 bits.
-pub fn new_default(port_name string) AsyncSerial {
-	this := AsyncSerial {
+pub fn new_default(port_name string) SerialX {
+	this := SerialX {
 		fd:             -1
 		baud_rate:     .bps_9600
 		flow_control:  .no_flow_control
 		parity:        .none_parity
 		stop_bit:      .stop_bit_1
 		char_size:     .char_size_8b
-		port_name:     port_name
+		port_name:      port_name
 	}
 
 	return this
@@ -161,8 +162,8 @@ pub fn new_default(port_name string) AsyncSerial {
 // new requires port name, baudrate, flow control, parity, stop bits and the character size
 // as inputs, in order to allocate the serial port.
 pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
-		   parity Parity, stop_bit StopBit, char_size CharacterSize) AsyncSerial {
-	this := AsyncSerial {
+		   parity Parity, stop_bit StopBit, char_size CharacterSize) SerialX {
+	this := SerialX {
 		fd:             -1
 		baud_rate:     baud_rate
 		flow_control:  flow_control
@@ -176,8 +177,8 @@ pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
 }
 
 // open the serial port and configure it (if it is able to open the port).
-// Returns enum of the type AsyncSerialReturn.
-pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
+// Returns enum of the type SerialXReturn.
+pub fn (mut this SerialX)open() SerialXReturn {
 
 	mut open_flag := u32(C.O_RDWR | C.O_NOCTTY)
 	if this.io_blocking == false {
@@ -196,7 +197,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	if rc != 1 {
 		vlogd('Not a tty device.')
 		this.close()
-		return AsyncSerialReturn.error_not_tty
+		return SerialXReturn.error_not_tty
 	}
 
 	if this.lock_port == true {
@@ -206,7 +207,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	}
  
 	rc = int(this.flush())
-	if rc != int(AsyncSerialReturn.okay) {
+	if rc != int(SerialXReturn.okay) {
 		vlogd('Failed to flush (${rc}).')
 	}
 
@@ -215,7 +216,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
   	if rc != 0 {
     	vlogd("Failed to get settings (${rc}).")
     	this.close()
-		return AsyncSerialReturn.error_unknown
+		return SerialXReturn.error_unknown
     }
 
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
@@ -250,7 +251,7 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	C.cfsetispeed(&options, int(this.baud_rate))
 	if int(C.cfgetospeed(&options)) != int(this.baud_rate) {
 		vlogd('Baud rate is not set.')
-		return AsyncSerialReturn.error_baudrate_mismatch
+		return SerialXReturn.error_baudrate_mismatch
 	}
 
 	// set CFLAG
@@ -324,14 +325,14 @@ pub fn (mut this AsyncSerial)open() AsyncSerialReturn {
 	if rc != 0 {
 		vlogd('Failed to set final configuration (${rc})')
 		this.close()
-		return AsyncSerialReturn.error_configuration_failed
+		return SerialXReturn.error_configuration_failed
 	}
 	
-	return AsyncSerialReturn.okay
+	return SerialXReturn.okay
 }
 
 // close the serial port.
-pub fn (mut this AsyncSerial)close() {
+pub fn (mut this SerialX)close() {
 	if this.is_connected == false {
 		return
 	}
@@ -341,12 +342,12 @@ pub fn (mut this AsyncSerial)close() {
 }
 
 // connected returns true if the serial port is open (connected)
-pub fn (mut this AsyncSerial) connected() bool {
+pub fn (mut this SerialX) connected() bool {
 	return this.is_connected
 }
 
 // available_bytes return number of availbale bytes in the input buffer.
-pub fn (mut this AsyncSerial)available_bytes() u32 {
+pub fn (mut this SerialX)available_bytes() u32 {
 	mut bytes_available := u32(0)
 
 	rc := C.ioctl(this.fd, C.FIONREAD, &bytes_available)
@@ -358,15 +359,15 @@ pub fn (mut this AsyncSerial)available_bytes() u32 {
 
 // has_data returns true if there are byte(s) available in the input buffer
 // otherwise, returns false
-pub fn (mut this AsyncSerial)has_data() bool {
+pub fn (mut this SerialX)has_data() bool {
 	return this.available_bytes() > 0
 }
 
 // read received bytes and returns:
 // number of received bytes (0 if no bytes avalable), 
 // read buffer - an empty buffer if no data, or an array of received bytes
-// and the enum of type AsyncSerialReturn.
-pub fn (mut this AsyncSerial)read(maxbytes int) (int, []byte, AsyncSerialReturn){
+// and the enum of type SerialXReturn.
+pub fn (mut this SerialX)read(maxbytes int) (int, []byte, SerialXReturn){
 	C.fcntl(this.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
@@ -376,14 +377,14 @@ pub fn (mut this AsyncSerial)read(maxbytes int) (int, []byte, AsyncSerialReturn)
 			return 0, []byte{len: 0}, this.get_error(nbytes)
 		}
 		buf[nbytes] = 0
-		return nbytes, buf.vbytes(nbytes), AsyncSerialReturn.okay
+		return nbytes, buf.vbytes(nbytes), SerialXReturn.okay
 	}
 }
 
 // read converts received bytes to a sting and returns:
 // number of recieved bytes (0 if no data received),
-// received string and the enum type of AsyncSerialReturn.
-pub fn (mut this AsyncSerial)read_string() (int, string, AsyncSerialReturn) {
+// received string and the enum type of SerialXReturn.
+pub fn (mut this SerialX)read_string() (int, string, SerialXReturn) {
 	ncount, buffer, rc := this.read(max_read_buffer)
 
 	mut rx_str := ''
@@ -396,12 +397,12 @@ pub fn (mut this AsyncSerial)read_string() (int, string, AsyncSerialReturn) {
 
 // write_string sends a string and
 // returns number of bytes that are sent and
-// enum type from AsyncSerialReturn.
-pub fn (mut this AsyncSerial)write_string(package string) (u32, AsyncSerialReturn){
+// enum type from SerialXReturn.
+pub fn (mut this SerialX)write_string(package string) (u32, SerialXReturn){
 	rc := int(C.write(this.fd, package.str, usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), AsyncSerialReturn.okay
+		return u32(rc), SerialXReturn.okay
 	}
 
 	error := this.get_error(rc)
@@ -410,12 +411,12 @@ pub fn (mut this AsyncSerial)write_string(package string) (u32, AsyncSerialRetur
 
 // write sends a byte array.
 // Returns: number of written data and
-// enum type from AsyncSerialReturn.
-pub fn (mut this AsyncSerial)write(package []byte) (u32, AsyncSerialReturn){
+// enum type from SerialXReturn.
+pub fn (mut this SerialX)write(package []byte) (u32, SerialXReturn){
 	rc := int(C.write(this.fd, voidptr(&package[0]), usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), AsyncSerialReturn.okay
+		return u32(rc), SerialXReturn.okay
 	}
 
 	error := this.get_error(rc)
@@ -423,86 +424,86 @@ pub fn (mut this AsyncSerial)write(package []byte) (u32, AsyncSerialReturn){
 }
 
 // flush_write removes received unread data
-// Returns enum type from AsyncSerialReturn.
-pub fn (mut this AsyncSerial)flush_read() AsyncSerialReturn{
+// Returns enum type from SerialXReturn.
+pub fn (mut this SerialX)flush_read() SerialXReturn{
 	rc := C.tcflush(this.fd, C.TCIFLUSH)
 	return this.get_error(rc)
 }
 
 // flush_write removes written data that are not sent.
-// Returns enum type from AsyncSerialReturn.
-pub fn (mut this AsyncSerial)flush_write_string() AsyncSerialReturn {
+// Returns enum type from SerialXReturn.
+pub fn (mut this SerialX)flush_write_string() SerialXReturn {
 	rc := C.tcflush(this.fd, C.TCOFLUSH)
 	return this.get_error(rc)
 }
 
 // flush removes both written data that are not sent and
-// received unread data, and returns enum type from AsyncSerialReturn.
-pub fn (mut this AsyncSerial)flush() AsyncSerialReturn{
+// received unread data, and returns enum type from SerialXReturn.
+pub fn (mut this SerialX)flush() SerialXReturn{
 	rc := C.tcflush(this.fd, C.TCIOFLUSH)
 	return this.get_error(rc)
 }
 
-pub fn (mut this AsyncSerial)get_error(error_code int) AsyncSerialReturn {
+pub fn (mut this SerialX)get_error(error_code int) SerialXReturn {
 	return match  error_code {
 		C.EBADF {
-			AsyncSerialReturn.error_bad_file_descriptor
+			SerialXReturn.error_bad_file_descriptor
 		}
 		C.EDESTADDRREQ {
-			AsyncSerialReturn.error_no_address
+			SerialXReturn.error_no_address
 		}
 		C.EFAULT {
-			AsyncSerialReturn.error_buffer_fault
+			SerialXReturn.error_buffer_fault
 		}
 		C.EFBIG {
-			AsyncSerialReturn.error_buffer_overlimit
+			SerialXReturn.error_buffer_overlimit
 		}
 		C.EINTR{
-			AsyncSerialReturn.error_interrupted
+			SerialXReturn.error_interrupted
 		}
 		C.EINVAL{
-			AsyncSerialReturn.error_invalid_parameters
+			SerialXReturn.error_invalid_parameters
 		}
 		C.EIO {
-			AsyncSerialReturn.error_io
+			SerialXReturn.error_io
 		}
 		C.ENOSPC {
-			AsyncSerialReturn.error_no_space
+			SerialXReturn.error_no_space
 		}
 		C.EPERM{
-			AsyncSerialReturn.error_no_permission
+			SerialXReturn.error_no_permission
 		}
 		C.EPIPE {
-			AsyncSerialReturn.error_closed_pipe
+			SerialXReturn.error_closed_pipe
 		}
 		else {
-			AsyncSerialReturn.error_unknown
+			SerialXReturn.error_unknown
 		}
 	}
 }
 
 // unlock_access acquires exclusive access of this serial port.
-pub fn (mut this AsyncSerial)lock_access() {
+pub fn (mut this SerialX)lock_access() {
 	this.lock_port = true
 	C.ioctl(this.fd, C.TIOCEXCL,  0)
 }
 
 // unlock_access removes exclusive access of this serial port.
-pub fn (mut this AsyncSerial)unlock_access() {
+pub fn (mut this SerialX)unlock_access() {
 	this.lock_port = false
 	C.ioctl(this.fd, C.TIOCGEXCL,  0)
 }
 
 // is_locked checks if exclusive access is locked or not.
 // Returns boolean: true if it is locked, otherwise false.
-pub fn (mut this AsyncSerial)is_locked() bool {
+pub fn (mut this SerialX)is_locked() bool {
 	return this.lock_port
 }
 
 // get_baudrate reads actual (configured) baudrate.
 // Return baudrate in bits-per-seconds, or it returns
 // an error if it fails.
-pub fn (mut this AsyncSerial)get_baudrate() ?int {
+pub fn (mut this SerialX)get_baudrate() ?int {
 	mut tx_baudrate := int(0)
 	mut rx_baudrate := int(0)
 	mut options := C.termios{}

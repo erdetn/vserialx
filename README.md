@@ -1,25 +1,24 @@
-# vasyncserial
-Tiny wrapper for serial communication in V.
-Tested only on `Linux ex270 5.11.0-27-generic #29~20.04.1-Ubuntu x86_64 x86_64 x86_64 GNU/Linux`.
+# vserialx
+**vserialx** is a tiny library for serial communication in Linux using V.
 
 ## Usage
 
-```
+```v
 module main
 
 import time
-import asyncserial
+import vserialx
 
 fn main() {
 	tty_port_name := '/dev/ttyUSB0'
 
 	// mut tty_port := asyncserial.new_default(tty_port_name)
-	mut tty_port := asyncserial.new(tty_port_name,
-									.bps_9600, 
-									.no_flow_control,
-									.none_parity,
-									.stop_bit_1,
-									.char_size_8b)
+	mut tty_port := vserialx.new(tty_port_name,
+					.bps_9600, 
+					.no_flow_control,
+					.none_parity,
+					.stop_bit_1,
+					.char_size_8b)
 
 	ret := tty_port.open()
 
@@ -29,8 +28,12 @@ fn main() {
 		return
 	}
 
+	// send string message
 	len, error := tty_port.write_string('Hello world.\n\n')
-	//len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
+	time.sleep(10000)
+
+	// send raw byte array
+	len, error := tty_port.write([byte(0x31), 0x32, 0x33, 0x0A])
 	println('write_buffer: ${len} bytes, ${error}')
 	time.sleep(100000)
 	
@@ -50,11 +53,12 @@ fn main() {
 ```
 
 ## TODO features
-[+] Exclusive access (locking and unlocking mechanism).
-[+] Reading configurations using `tcgetattr` and `ioctl`. Read only the baudrate for now.
-[+] Better error/return code naming
-[+] The documentation
+
+- [ ] Exclusive access (locking and unlocking mechanism).
+- [ ] Reading configurations using `tcgetattr` and `ioctl`. Read only the baudrate for now.
+- [ ] Better error/return code naming
+- [ ] The documentation
 
 ## TODO testings
-- Other serial port configurations need to be tested.
-- Bloking read/write need to be tested.
+- [ ] Other serial port configurations need to be tested.
+- [ ] Bloking read/write need to be tested.
