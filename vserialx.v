@@ -243,7 +243,7 @@ pub fn (mut this SerialX)open() SerialXReturn {
 
 	// Set up timeouts: Calls to read() will return as soon as there is
 	// at least one byte available or when 100 ms has passed.
-	options.c_cc[C.VTIME] = byte((this.timeout)/100)
+	options.c_cc[C.VTIME] = u8(((this.timeout)/100) & 0xFF)
 	options.c_cc[C.VMIN] = 0
  
 	// Set baudrate
@@ -367,14 +367,14 @@ pub fn (mut this SerialX)has_data() bool {
 // number of received bytes (0 if no bytes avalable), 
 // read buffer - an empty buffer if no data, or an array of received bytes
 // and the enum of type SerialXReturn.
-pub fn (mut this SerialX)read(maxbytes int) (int, []byte, SerialXReturn){
+pub fn (mut this SerialX)read(maxbytes int) (int, []u8, SerialXReturn){
 	C.fcntl(this.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
 		nbytes := C.read(this.fd, buf, maxbytes)
 		if nbytes < 0 {
 			free(buf)
-			return 0, []byte{len: 0}, this.get_error(nbytes)
+			return 0, []u8{len: 0}, this.get_error(nbytes)
 		}
 		buf[nbytes] = 0
 		return nbytes, buf.vbytes(nbytes), SerialXReturn.okay
@@ -458,10 +458,10 @@ pub fn (mut this SerialX)get_error(error_code int) SerialXReturn {
 		C.EFBIG {
 			SerialXReturn.error_buffer_overlimit
 		}
-		C.EINTR{
+		C.EINTR {
 			SerialXReturn.error_interrupted
 		}
-		C.EINVAL{
+		C.EINVAL {
 			SerialXReturn.error_invalid_parameters
 		}
 		C.EIO {
@@ -470,7 +470,7 @@ pub fn (mut this SerialX)get_error(error_code int) SerialXReturn {
 		C.ENOSPC {
 			SerialXReturn.error_no_space
 		}
-		C.EPERM{
+		C.EPERM {
 			SerialXReturn.error_no_permission
 		}
 		C.EPIPE {
