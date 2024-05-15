@@ -2,18 +2,14 @@
 
 module vserialx
 
-#flag -I /usr/include/
-#flag -I /usr/include/x86_64-linux-gnu/
-#flag -I /usr/include/x86_64-linux-gnu/sys
-
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <errno.h>
-#include <features.h>
+#include "fcntl.h"
+#include "stdio.h"
+#include "unistd.h"
+#include "stdint.h"
+#include "sys/ioctl.h"
+#include "termios.h"
+#include "errno.h"
+#include "features.h"
 
 struct C.termios {
 mut:
@@ -21,8 +17,8 @@ mut:
 	c_oflag  u32
 	c_cflag  u32
 	c_lflag  u32
-	c_line   byte
-	c_cc[32] byte
+	c_line   u8
+	c_cc[32] u8
 	c_ispeed u32
 	c_ospeed u32
 }
@@ -30,7 +26,7 @@ mut:
 fn C.open(&char, u32) int
 fn C.write(int, voidptr, usize) int
 fn C.read(int, voidptr, usize) int
-fn C.close(int)
+fn C.close(int) int
 
 fn C.tcgetattr(int, voidptr) int
 fn C.tcsetattr(int, int, voidptr) int
@@ -79,7 +75,7 @@ const c_baudrates = [0 50 75 110 134 150
 			2400 4800 9600 7200 14400 
 			19200 28800 38400]
 
-pub enum SerialXReturn {
+pub enum ReturnStatus {
 	okay
 	error_not_tty
 	error_configuration_failed
@@ -96,6 +92,7 @@ pub enum SerialXReturn {
 	error_no_permission
 	error_closed_pipe
 	error_no_address
+	error_is_disconnected
 }
 
 pub enum Parity {
@@ -122,7 +119,7 @@ pub enum CharacterSize {
 	char_size_8b
 }
 
-pub struct SerialX {
+pub struct SerialPort {
 mut:
 	fd             int
 	port_name      string
@@ -145,8 +142,8 @@ mut:
 
 // new_default allocates a serial port with baudrate of 9600, no flow control,
 // no parity, stop bit 1 and character size of 8 bits.
-pub fn new_default(port_name string) SerialX {
-	this := SerialX {
+pub fn new_default(port_name string) SerialPort {
+	sp := SerialPort {
 		fd:             -1
 		baud_rate:     .bps_9600
 		flow_control:  .no_flow_control
@@ -156,14 +153,14 @@ pub fn new_default(port_name string) SerialX {
 		port_name:      port_name
 	}
 
-	return this
+	return sp
 }
 
 // new requires port name, baudrate, flow control, parity, stop bits and the character size
 // as inputs, in order to allocate the serial port.
 pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
-		   parity Parity, stop_bit StopBit, char_size CharacterSize) SerialX {
-	this := SerialX {
+		   parity Parity, stop_bit StopBit, char_size CharacterSize) SerialPort {
+	sp := SerialPort {
 		fd:             -1
 		baud_rate:     baud_rate
 		flow_control:  flow_control
@@ -173,66 +170,61 @@ pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
 		port_name:     port_name
 	}
 
-	return this
+	return sp
 }
 
 // open the serial port and configure it (if it is able to open the port).
-// Returns enum of the type SerialXReturn.
-pub fn (mut this SerialX)open() SerialXReturn {
+// Returns enum of the type ReturnStatus.
+pub fn (mut sp SerialPort)open() ReturnStatus {
 
 	mut open_flag := u32(C.O_RDWR | C.O_NOCTTY)
-	if this.io_blocking == false {
+	if sp.io_blocking == false {
 		open_flag |= u32(C.O_NDELAY)
 	} else {
 		open_flag &= u32(~(C.O_NDELAY))
 	}
 
-	this.fd = int(C.open(this.port_name.str, open_flag))
-	if this.fd == -1 {
-		return this.get_error(this.fd)
+	sp.fd = int(C.open(sp.port_name.str, open_flag))
+	if sp.fd == -1 {
+		return sp.get_error(sp.fd)
 	}
-	this.is_connected = true
+	sp.is_connected = true
 
-	mut rc := C.isatty(this.fd)
+	mut rc := C.isatty(sp.fd)
 	if rc != 1 {
-		vlogd('Not a tty device.')
-		this.close()
-		return SerialXReturn.error_not_tty
+		sp.close()
+		return ReturnStatus.error_not_tty
 	}
 
-	if this.lock_port == true {
-		C.ioctl(this.fd, C.TIOCEXCL,  0)
+	if sp.lock_port == true {
+		C.ioctl(sp.fd, C.TIOCEXCL,  0)
 	} else {
-		C.ioctl(this.fd, C.TIOCGEXCL, 0)
+		C.ioctl(sp.fd, C.TIOCGEXCL, 0)
 	}
  
-	rc = int(this.flush())
-	if rc != int(SerialXReturn.okay) {
-		vlogd('Failed to flush (${rc}).')
-	}
+	rc = int(sp.flush())
 
 	mut options := C.termios{}
-	rc = int(C.tcgetattr(this.fd, &options))
+	rc = int(C.tcgetattr(sp.fd, &options))
   	if rc != 0 {
-    	vlogd("Failed to get settings (${rc}).")
-    	this.close()
-		return SerialXReturn.error_unknown
+    	sp.close()
+		return ReturnStatus.error_unknown
     }
 
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
-	if this.flag_ignore_cr == true {
+	if sp.flag_ignore_cr == true {
 		options.c_iflag &= u32(~(C.IGNCR))
 	} else {
 		options.c_iflag |= u32((C.IGNCR))
 	}
 
-	if this.flag_map_nl_cr == false {
+	if sp.flag_map_nl_cr == false {
 		options.c_iflag &= u32(~(C.INLCR))
 	} else {
 		options.c_iflag |= u32(C.INLCR)
 	}
 
-	if this.flag_map_cr_nl == false {
+	if sp.flag_map_cr_nl == false {
 		options.c_iflag &= u32(~(C.ICRNL))
 	} else {
 		options.c_iflag |= u32(C.ICRNL)
@@ -243,22 +235,21 @@ pub fn (mut this SerialX)open() SerialXReturn {
 
 	// Set up timeouts: Calls to read() will return as soon as there is
 	// at least one byte available or when 100 ms has passed.
-	options.c_cc[C.VTIME] = u8(((this.timeout)/100) & 0xFF)
+	options.c_cc[C.VTIME] = u8(((sp.timeout)/100) & 0xFF)
 	options.c_cc[C.VMIN] = 0
  
 	// Set baudrate
-	C.cfsetospeed(&options, int(this.baud_rate))
-	C.cfsetispeed(&options, int(this.baud_rate))
-	if int(C.cfgetospeed(&options)) != int(this.baud_rate) {
-		vlogd('Baud rate is not set.')
-		return SerialXReturn.error_baudrate_mismatch
+	C.cfsetospeed(&options, int(sp.baud_rate))
+	C.cfsetispeed(&options, int(sp.baud_rate))
+	if int(C.cfgetospeed(&options)) != int(sp.baud_rate) {
+		return ReturnStatus.error_baudrate_mismatch
 	}
 
 	// set CFLAG
 	options.c_cflag |= u32((C.CLOCAL | C.CREAD))
 
 	// Configure flow control 
-	match this.flow_control {
+	match sp.flow_control {
 		.hardware_flow_control{
 			options.c_cflag |= u32(C.CRTSCTS)
 			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
@@ -278,7 +269,7 @@ pub fn (mut this SerialX)open() SerialXReturn {
 
 	// Configure parity
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
-	match this.parity {
+	match sp.parity {
 		.none_parity {
 			options.c_cflag &= u32(~(C.PARENB))
 		}
@@ -293,7 +284,7 @@ pub fn (mut this SerialX)open() SerialXReturn {
 	}
 
 	// Configure stop bit
-	match this.stop_bit {
+	match sp.stop_bit {
 		.stop_bit_1 {
 			options.c_cflag &= u32(~(C.CSTOPB))
 		}
@@ -305,7 +296,7 @@ pub fn (mut this SerialX)open() SerialXReturn {
 	// Configure character size
 	options.c_cflag &= u32(~(C.CSIZE))
 	options.c_cflag &= u32(~(C.CS5 | C.CS6 | C.CS7 | C.CS8))
-	match this.char_size {
+	match sp.char_size {
 		.char_size_5b {
 			options.c_cflag |= u32(C.CS5)
 		}
@@ -321,36 +312,33 @@ pub fn (mut this SerialX)open() SerialXReturn {
 	}
 
 	// Set final configuration
-	rc = int(C.tcsetattr(this.fd, C.TCSANOW, &options))
+	rc = int(C.tcsetattr(sp.fd, C.TCSANOW, &options))
 	if rc != 0 {
-		vlogd('Failed to set final configuration (${rc})')
-		this.close()
-		return SerialXReturn.error_configuration_failed
+		sp.close()
+		return ReturnStatus.error_configuration_failed
 	}
 	
-	return SerialXReturn.okay
+	return ReturnStatus.okay
 }
 
 // close the serial port.
-pub fn (mut this SerialX)close() {
-	if this.is_connected == false {
-		return
+pub fn (mut sp SerialPort)close() ReturnStatus {
+	if sp.is_connected == false {
+		return ReturnStatus.error_is_disconnected
 	}
-
-	this.is_connected = false
-	C.close(this.fd)
+	return sp.get_error(C.close(sp.fd))
 }
 
 // connected returns true if the serial port is open (connected)
-pub fn (mut this SerialX) connected() bool {
-	return this.is_connected
+pub fn (mut sp SerialPort) connected() bool {
+	return sp.is_connected
 }
 
 // available_bytes return number of availbale bytes in the input buffer.
-pub fn (mut this SerialX)available_bytes() u32 {
+pub fn (mut sp SerialPort)available_bytes() u32 {
 	mut bytes_available := u32(0)
 
-	rc := C.ioctl(this.fd, C.FIONREAD, &bytes_available)
+	rc := C.ioctl(sp.fd, C.FIONREAD, &bytes_available)
 	if rc != 0 {
 		return 0
 	}
@@ -359,33 +347,33 @@ pub fn (mut this SerialX)available_bytes() u32 {
 
 // has_data returns true if there are byte(s) available in the input buffer
 // otherwise, returns false
-pub fn (mut this SerialX)has_data() bool {
-	return this.available_bytes() > 0
+pub fn (mut sp SerialPort)has_data() bool {
+	return sp.available_bytes() > 0
 }
 
 // read received bytes and returns:
 // number of received bytes (0 if no bytes avalable), 
 // read buffer - an empty buffer if no data, or an array of received bytes
-// and the enum of type SerialXReturn.
-pub fn (mut this SerialX)read(maxbytes int) (int, []u8, SerialXReturn){
-	C.fcntl(this.fd, C.F_SETFL, C.FNDELAY)
+// and the enum of type ReturnStatus.
+pub fn (mut sp SerialPort)read(maxbytes int) (int, []u8, ReturnStatus){
+	C.fcntl(sp.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
-		nbytes := C.read(this.fd, buf, maxbytes)
+		nbytes := C.read(sp.fd, buf, maxbytes)
 		if nbytes < 0 {
 			free(buf)
-			return 0, []u8{len: 0}, this.get_error(nbytes)
+			return 0, []u8{len: 0}, sp.get_error(nbytes)
 		}
 		buf[nbytes] = 0
-		return nbytes, buf.vbytes(nbytes), SerialXReturn.okay
+		return nbytes, buf.vbytes(nbytes), ReturnStatus.okay
 	}
 }
 
 // read converts received bytes to a sting and returns:
 // number of recieved bytes (0 if no data received),
-// received string and the enum type of SerialXReturn.
-pub fn (mut this SerialX)read_string() (int, string, SerialXReturn) {
-	ncount, buffer, rc := this.read(max_read_buffer)
+// received string and the enum type of ReturnStatus.
+pub fn (mut sp SerialPort)read_string() (int, string, ReturnStatus) {
+	ncount, buffer, rc := sp.read(max_read_buffer)
 
 	mut rx_str := ''
 	if ncount > 0 {
@@ -397,119 +385,119 @@ pub fn (mut this SerialX)read_string() (int, string, SerialXReturn) {
 
 // write_string sends a string and
 // returns number of bytes that are sent and
-// enum type from SerialXReturn.
-pub fn (mut this SerialX)write_string(package string) (u32, SerialXReturn){
-	rc := int(C.write(this.fd, package.str, usize(package.len)))
+// enum type from ReturnStatus.
+pub fn (mut sp SerialPort)write_string(package string) (u32, ReturnStatus){
+	rc := int(C.write(sp.fd, package.str, usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), SerialXReturn.okay
+		return u32(rc), ReturnStatus.okay
 	}
 
-	error := this.get_error(rc)
+	error := sp.get_error(rc)
 	return 0, error
 }
 
 // write sends a byte array.
 // Returns: number of written data and
-// enum type from SerialXReturn.
-pub fn (mut this SerialX)write(package []byte) (u32, SerialXReturn){
-	rc := int(C.write(this.fd, voidptr(&package[0]), usize(package.len)))
+// enum type from ReturnStatus.
+pub fn (mut sp SerialPort)write(package []byte) (u32, ReturnStatus){
+	rc := int(C.write(sp.fd, voidptr(&package[0]), usize(package.len)))
 	
 	if rc > 0 {
-		return u32(rc), SerialXReturn.okay
+		return u32(rc), ReturnStatus.okay
 	}
 
-	error := this.get_error(rc)
+	error := sp.get_error(rc)
 	return 0, error
 }
 
 // flush_write removes received unread data
-// Returns enum type from SerialXReturn.
-pub fn (mut this SerialX)flush_read() SerialXReturn{
-	rc := C.tcflush(this.fd, C.TCIFLUSH)
-	return this.get_error(rc)
+// Returns enum type from ReturnStatus.
+pub fn (mut sp SerialPort)flush_read() ReturnStatus{
+	rc := C.tcflush(sp.fd, C.TCIFLUSH)
+	return sp.get_error(rc)
 }
 
 // flush_write removes written data that are not sent.
-// Returns enum type from SerialXReturn.
-pub fn (mut this SerialX)flush_write_string() SerialXReturn {
-	rc := C.tcflush(this.fd, C.TCOFLUSH)
-	return this.get_error(rc)
+// Returns enum type from ReturnStatus.
+pub fn (mut sp SerialPort)flush_write_string() ReturnStatus {
+	rc := C.tcflush(sp.fd, C.TCOFLUSH)
+	return sp.get_error(rc)
 }
 
 // flush removes both written data that are not sent and
-// received unread data, and returns enum type from SerialXReturn.
-pub fn (mut this SerialX)flush() SerialXReturn{
-	rc := C.tcflush(this.fd, C.TCIOFLUSH)
-	return this.get_error(rc)
+// received unread data, and returns enum type from ReturnStatus.
+pub fn (mut sp SerialPort)flush() ReturnStatus{
+	rc := C.tcflush(sp.fd, C.TCIOFLUSH)
+	return sp.get_error(rc)
 }
 
-pub fn (mut this SerialX)get_error(error_code int) SerialXReturn {
+pub fn (mut sp SerialPort)get_error(error_code int) ReturnStatus {
 	return match  error_code {
 		C.EBADF {
-			SerialXReturn.error_bad_file_descriptor
+			ReturnStatus.error_bad_file_descriptor
 		}
 		C.EDESTADDRREQ {
-			SerialXReturn.error_no_address
+			ReturnStatus.error_no_address
 		}
 		C.EFAULT {
-			SerialXReturn.error_buffer_fault
+			ReturnStatus.error_buffer_fault
 		}
 		C.EFBIG {
-			SerialXReturn.error_buffer_overlimit
+			ReturnStatus.error_buffer_overlimit
 		}
 		C.EINTR {
-			SerialXReturn.error_interrupted
+			ReturnStatus.error_interrupted
 		}
 		C.EINVAL {
-			SerialXReturn.error_invalid_parameters
+			ReturnStatus.error_invalid_parameters
 		}
 		C.EIO {
-			SerialXReturn.error_io
+			ReturnStatus.error_io
 		}
 		C.ENOSPC {
-			SerialXReturn.error_no_space
+			ReturnStatus.error_no_space
 		}
 		C.EPERM {
-			SerialXReturn.error_no_permission
+			ReturnStatus.error_no_permission
 		}
 		C.EPIPE {
-			SerialXReturn.error_closed_pipe
+			ReturnStatus.error_closed_pipe
 		}
 		else {
-			SerialXReturn.error_unknown
+			ReturnStatus.error_unknown
 		}
 	}
 }
 
-// unlock_access acquires exclusive access of this serial port.
-pub fn (mut this SerialX)lock_access() {
-	this.lock_port = true
-	C.ioctl(this.fd, C.TIOCEXCL,  0)
+// unlock_access acquires exclusive access of sp serial port.
+pub fn (mut sp SerialPort)lock_access() {
+	sp.lock_port = true
+	C.ioctl(sp.fd, C.TIOCEXCL,  0)
 }
 
-// unlock_access removes exclusive access of this serial port.
-pub fn (mut this SerialX)unlock_access() {
-	this.lock_port = false
-	C.ioctl(this.fd, C.TIOCGEXCL,  0)
+// unlock_access removes exclusive access of sp serial port.
+pub fn (mut sp SerialPort)unlock_access() {
+	sp.lock_port = false
+	C.ioctl(sp.fd, C.TIOCGEXCL,  0)
 }
 
 // is_locked checks if exclusive access is locked or not.
 // Returns boolean: true if it is locked, otherwise false.
-pub fn (mut this SerialX)is_locked() bool {
-	return this.lock_port
+pub fn (mut sp SerialPort)is_locked() bool {
+	return sp.lock_port
 }
 
 // get_baudrate reads actual (configured) baudrate.
 // Return baudrate in bits-per-seconds, or it returns
 // an error if it fails.
-pub fn (mut this SerialX)get_baudrate() ?int {
+pub fn (mut sp SerialPort)get_baudrate() !int {
 	mut tx_baudrate := int(0)
 	mut rx_baudrate := int(0)
 	mut options := C.termios{}
 
 
-	rc := int(C.tcgetattr(this.fd, &options))
+	rc := int(C.tcgetattr(sp.fd, &options))
   	if rc != 0 {
 		return error('Failed to get options.')
     }
@@ -526,11 +514,4 @@ pub fn (mut this SerialX)get_baudrate() ?int {
 	}
 
 	return c_baudrates[tx_baudrate]
-}
-
-[inline]
-fn vlogd(message string) {
-	$if debug {
-		println(message)
-	}
 }
