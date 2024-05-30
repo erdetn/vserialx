@@ -1,9 +1,5 @@
-# vserialx
-**vserialx** is a tiny library for serial communication in Linux using V.
+// Copyright (c) 2024 Erdet Nasufi, MIT License
 
-## Usage
-
-```v
 module main
 
 import time
@@ -29,7 +25,7 @@ fn main() {
 	}
 
 	for {
-		if dev.available_bytes() > 0 {
+		if dev.count() > 0 {
 			len, buff, rt := dev.read(10)
 			dump(rt)
 			if len > 0 {
@@ -39,15 +35,3 @@ fn main() {
 		time.sleep(time.second)
 	}
 }
-```
-
-## TODO features
-
-- [ ] Exclusive access (locking and unlocking mechanism).
-- [ ] Reading configurations using `tcgetattr` and `ioctl`. Read only the baudrate for now.
-- [ ] Better error/return code naming
-- [ ] The documentation
-
-## TODO testings
-- [ ] Other serial port configurations need to be tested.
-- [ ] Bloking read/write need to be tested.

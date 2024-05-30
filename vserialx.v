@@ -18,7 +18,7 @@ mut:
 	c_cflag  u32
 	c_lflag  u32
 	c_line   u8
-	c_cc[32] u8
+	c_cc     [32]u8
 	c_ispeed u32
 	c_ospeed u32
 }
@@ -44,36 +44,32 @@ fn C.ioctl(int, int, voidptr) int
 fn C.isatty(int) int
 fn C.fcntl(int, int, int) int
 
-const (
-	max_read_buffer  = 256
-	max_write_buffer = 256
-)
+const max_read_buffer = 256
+const max_write_buffer = 256
 
 pub enum Baudrate {
-	bps_0      = C.B0      // 0  [bps]
-	bps_50     = C.B50     // 50 [bps]
-	bps_75     = C.B75     // 75 [bps]
-	bps_110    = C.B110    // 110 [bps]
-	bps_134    = C.B134    // 134.5 [bps]
-	bps_150    = C.B150    // 150 [bps]
-	bps_200    = C.B200    // 200 [bps]
-	bps_300    = C.B300    // 300 [bps]
-	bps_600    = C.B600    // 600 [bps]
-	bps_1200   = C.B1200   // 1200 [bps]
-	bps_1800   = C.B1800   // 1800 [bps]
-	bps_2400   = C.B2400   // 2400 [bps]
-	bps_4800   = C.B4800   // 4800 [bps]
-	bps_9600   = C.B9600   // 9600 [bps]
-	bps_19200  = C.B19200  // 19200 [bps]
-	bps_38400  = C.B38400  // 38400 [bps]
-	bps_57600  = C.B57600  // 57,600 [bps]
-	bps_115200 = C.B115200 // 115,200 [bps]
+	b0      = C.B0 // 0  [bps]
+	b50     = C.B50 // 50 [bps]
+	b75     = C.B75 // 75 [bps]
+	b110    = C.B110 // 110 [bps]
+	b134    = C.B134 // 134.5 [bps]
+	b150    = C.B150 // 150 [bps]
+	b200    = C.B200 // 200 [bps]
+	b300    = C.B300 // 300 [bps]
+	b600    = C.B600 // 600 [bps]
+	b1200   = C.B1200 // 1200 [bps]
+	b1800   = C.B1800 // 1800 [bps]
+	b2400   = C.B2400 // 2400 [bps]
+	b4800   = C.B4800 // 4800 [bps]
+	b9600   = C.B9600 // 9600 [bps]
+	b19200  = C.B19200 // 19200 [bps]
+	b38400  = C.B38400 // 38400 [bps]
+	b57600  = C.B57600 // 57,600 [bps]
+	b115200 = C.B115200 // 115,200 [bps]
 }
 
-const c_baudrates = [0 50 75 110 134 150 
-			200 300 600 1200 1800  
-			2400 4800 9600 7200 14400 
-			19200 28800 38400]
+const c_baudrates = [0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 7200,
+	14400, 19200, 28800, 38400]
 
 pub enum ReturnStatus {
 	okay
@@ -96,61 +92,61 @@ pub enum ReturnStatus {
 }
 
 pub enum Parity {
-	none_parity
-	odd_parity
-	even_parity
+	@none
+	odd
+	even
 }
 
 pub enum FlowControl {
-	hardware_flow_control
-	software_flow_control
-	no_flow_control
+	hardware
+	software
+	@none
 }
 
 pub enum StopBit {
-	stop_bit_1
-	stop_bit_2
+	one
+	two
 }
 
 pub enum CharacterSize {
-	char_size_5b
-	char_size_6b
-	char_size_7b
-	char_size_8b
+	char5b
+	char6b
+	char7b
+	char8b
 }
 
 pub struct SerialPort {
 mut:
-	fd             int
-	port_name      string
-	baud_rate      Baudrate
-	is_connected   bool
-	io_blocking    bool
-	flow_control   FlowControl
-	parity         Parity
-	stop_bit       StopBit
-	char_size      CharacterSize
+	fd           int
+	port_name    string
+	baud_rate    Baudrate
+	is_connected bool
+	io_blocking  bool
+	flow_control FlowControl
+	parity       Parity
+	stop_bit     StopBit
+	char_size    CharacterSize
 
-	lock_port      bool = true
+	lock_port bool = true
 
 	flag_ignore_cr bool = true
 	flag_map_cr_nl bool
 	flag_map_nl_cr bool
 
-	timeout        u32  = 100 // [ms]
+	timeout u32 = 100 // [ms]
 }
 
 // new_default allocates a serial port with baudrate of 9600, no flow control,
 // no parity, stop bit 1 and character size of 8 bits.
 pub fn new_default(port_name string) SerialPort {
-	sp := SerialPort {
-		fd:             -1
-		baud_rate:     .bps_9600
-		flow_control:  .no_flow_control
-		parity:        .none_parity
-		stop_bit:      .stop_bit_1
-		char_size:     .char_size_8b
-		port_name:      port_name
+	sp := SerialPort{
+		fd: -1
+		baud_rate: .b9600
+		flow_control: .@none
+		parity: .@none
+		stop_bit: .one
+		char_size: .char8b
+		port_name: port_name
 	}
 
 	return sp
@@ -158,16 +154,15 @@ pub fn new_default(port_name string) SerialPort {
 
 // new requires port name, baudrate, flow control, parity, stop bits and the character size
 // as inputs, in order to allocate the serial port.
-pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
-		   parity Parity, stop_bit StopBit, char_size CharacterSize) SerialPort {
-	sp := SerialPort {
-		fd:             -1
-		baud_rate:     baud_rate
-		flow_control:  flow_control
-		parity:        parity
-		stop_bit:      stop_bit
-		char_size:     char_size
-		port_name:     port_name
+pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl, parity Parity, stop_bit StopBit, char_size CharacterSize) SerialPort {
+	sp := SerialPort{
+		fd: -1
+		baud_rate: baud_rate
+		flow_control: flow_control
+		parity: parity
+		stop_bit: stop_bit
+		char_size: char_size
+		port_name: port_name
 	}
 
 	return sp
@@ -175,18 +170,17 @@ pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl,
 
 // open the serial port and configure it (if it is able to open the port).
 // Returns enum of the type ReturnStatus.
-pub fn (mut sp SerialPort)open() ReturnStatus {
-
+pub fn (mut sp SerialPort) open() ReturnStatus {
 	mut open_flag := u32(C.O_RDWR | C.O_NOCTTY)
 	if sp.io_blocking == false {
 		open_flag |= u32(C.O_NDELAY)
 	} else {
-		open_flag &= u32(~(C.O_NDELAY))
+		open_flag &= u32(~C.O_NDELAY)
 	}
 
 	sp.fd = int(C.open(sp.port_name.str, open_flag))
 	if sp.fd == -1 {
-		return sp.get_error(sp.fd)
+		return sp.error(sp.fd)
 	}
 	sp.is_connected = true
 
@@ -197,35 +191,35 @@ pub fn (mut sp SerialPort)open() ReturnStatus {
 	}
 
 	if sp.lock_port == true {
-		C.ioctl(sp.fd, C.TIOCEXCL,  0)
+		C.ioctl(sp.fd, C.TIOCEXCL, 0)
 	} else {
 		C.ioctl(sp.fd, C.TIOCGEXCL, 0)
 	}
- 
+
 	rc = int(sp.flush())
 
 	mut options := C.termios{}
 	rc = int(C.tcgetattr(sp.fd, &options))
-  	if rc != 0 {
-    	sp.close()
+	if rc != 0 {
+		sp.close()
 		return ReturnStatus.error_unknown
-    }
+	}
 
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
 	if sp.flag_ignore_cr == true {
-		options.c_iflag &= u32(~(C.IGNCR))
+		options.c_iflag &= u32(~C.IGNCR)
 	} else {
-		options.c_iflag |= u32((C.IGNCR))
+		options.c_iflag |= u32(C.IGNCR)
 	}
 
 	if sp.flag_map_nl_cr == false {
-		options.c_iflag &= u32(~(C.INLCR))
+		options.c_iflag &= u32(~C.INLCR)
 	} else {
 		options.c_iflag |= u32(C.INLCR)
 	}
 
 	if sp.flag_map_cr_nl == false {
-		options.c_iflag &= u32(~(C.ICRNL))
+		options.c_iflag &= u32(~C.ICRNL)
 	} else {
 		options.c_iflag |= u32(C.ICRNL)
 	}
@@ -235,9 +229,9 @@ pub fn (mut sp SerialPort)open() ReturnStatus {
 
 	// Set up timeouts: Calls to read() will return as soon as there is
 	// at least one byte available or when 100 ms has passed.
-	options.c_cc[C.VTIME] = u8(((sp.timeout)/100) & 0xFF)
+	options.c_cc[C.VTIME] = u8(((sp.timeout) / 100) & 0xFF)
 	options.c_cc[C.VMIN] = 0
- 
+
 	// Set baudrate
 	C.cfsetospeed(&options, int(sp.baud_rate))
 	C.cfsetispeed(&options, int(sp.baud_rate))
@@ -248,36 +242,36 @@ pub fn (mut sp SerialPort)open() ReturnStatus {
 	// set CFLAG
 	options.c_cflag |= u32((C.CLOCAL | C.CREAD))
 
-	// Configure flow control 
+	// Configure flow control
 	match sp.flow_control {
-		.hardware_flow_control{
+		.hardware {
+			options.c_cflag &= u32(~C.CRTSCTS) // Clear CRTSCTS
 			options.c_cflag |= u32(C.CRTSCTS)
 			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
-			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
 		}
-		.software_flow_control{
+		.software {
+			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
 			options.c_iflag |= u32((C.IXON | C.IXOFF | C.IXANY))
-			options.c_iflag |= u32((C.IXON | C.IXOFF | C.IXANY))
-			options.c_cflag &= u32(~(C.CRTSCTS))
+			options.c_cflag &= u32(~C.CRTSCTS)
 		}
-		else{
+		else {
 			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
-			options.c_cflag &= u32(~(C.CRTSCTS))
-			options.c_iflag &= u32(~(C.IXON | C.IXOFF | C.IXANY))
+			options.c_cflag &= u32(~C.CRTSCTS)
 		}
 	}
 
 	// Configure parity
-	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
+	options.c_iflag &= u32(~(C.INPCK | C.ISTRIP))
+	options.c_cflag &= u32(~(C.PARENB | C.PARODD))
 	match sp.parity {
-		.none_parity {
-			options.c_cflag &= u32(~(C.PARENB))
+		.@none {}
+		.even {
+			options.c_iflag |= u32((C.INPCK | C.ISTRIP))
+			options.c_cflag |= u32(C.PARENB)
+			options.c_cflag &= u32(~C.PARODD)
 		}
-		.even_parity {
-			options.c_cflag |= u32((C.PARENB))
-			options.c_cflag &= u32(~(C.PARODD))
-		}
-		.odd_parity {
+		.odd {
+			options.c_iflag |= u32((C.INPCK | C.ISTRIP))
 			options.c_cflag |= u32(C.PARENB)
 			options.c_cflag |= u32(C.PARODD)
 		}
@@ -285,28 +279,29 @@ pub fn (mut sp SerialPort)open() ReturnStatus {
 
 	// Configure stop bit
 	match sp.stop_bit {
-		.stop_bit_1 {
-			options.c_cflag &= u32(~(C.CSTOPB))
+		.one {
+			options.c_cflag &= u32(~C.CSTOPB) // Clear stop bit (stop bit 1)
 		}
-		.stop_bit_2 {
-			options.c_cflag |= u32(C.CSTOPB)
+		.two {
+			options.c_cflag &= u32(~C.CSTOPB) // Clear stop bit (stop bit 1)
+			options.c_cflag |= u32(C.CSTOPB) // Set stop bit (stop bit 2)
 		}
 	}
 
 	// Configure character size
-	options.c_cflag &= u32(~(C.CSIZE))
+	options.c_cflag &= u32(~C.CSIZE) // Clear all the size bits
 	options.c_cflag &= u32(~(C.CS5 | C.CS6 | C.CS7 | C.CS8))
 	match sp.char_size {
-		.char_size_5b {
+		.char5b {
 			options.c_cflag |= u32(C.CS5)
 		}
-		.char_size_6b {
+		.char6b {
 			options.c_cflag |= u32(C.CS6)
 		}
-		.char_size_7b {
+		.char7b {
 			options.c_cflag |= u32(C.CS7)
 		}
-		.char_size_8b {
+		.char8b {
 			options.c_cflag |= u32(C.CS8)
 		}
 	}
@@ -317,25 +312,25 @@ pub fn (mut sp SerialPort)open() ReturnStatus {
 		sp.close()
 		return ReturnStatus.error_configuration_failed
 	}
-	
+
 	return ReturnStatus.okay
 }
 
 // close the serial port.
-pub fn (mut sp SerialPort)close() ReturnStatus {
+pub fn (mut sp SerialPort) close() ReturnStatus {
 	if sp.is_connected == false {
 		return ReturnStatus.error_is_disconnected
 	}
-	return sp.get_error(C.close(sp.fd))
+	return sp.error(C.close(sp.fd))
 }
 
 // connected returns true if the serial port is open (connected)
-pub fn (mut sp SerialPort) connected() bool {
+pub fn (mut sp SerialPort) is_connected() bool {
 	return sp.is_connected
 }
 
 // available_bytes return number of availbale bytes in the input buffer.
-pub fn (mut sp SerialPort)available_bytes() u32 {
+pub fn (mut sp SerialPort) count() u32 {
 	mut bytes_available := u32(0)
 
 	rc := C.ioctl(sp.fd, C.FIONREAD, &bytes_available)
@@ -345,24 +340,24 @@ pub fn (mut sp SerialPort)available_bytes() u32 {
 	return u32(bytes_available)
 }
 
-// has_data returns true if there are byte(s) available in the input buffer
-// otherwise, returns false
-pub fn (mut sp SerialPort)has_data() bool {
-	return sp.available_bytes() > 0
+// empty returns false if there are byte(s) available in the input buffer
+// otherwise, returns true
+pub fn (mut sp SerialPort) is_empty() bool {
+	return sp.count() == 0
 }
 
 // read received bytes and returns:
-// number of received bytes (0 if no bytes avalable), 
+// number of received bytes (0 if no bytes avalable),
 // read buffer - an empty buffer if no data, or an array of received bytes
 // and the enum of type ReturnStatus.
-pub fn (mut sp SerialPort)read(maxbytes int) (int, []u8, ReturnStatus){
+pub fn (mut sp SerialPort) read(maxbytes int) (int, []u8, ReturnStatus) {
 	C.fcntl(sp.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
 		nbytes := C.read(sp.fd, buf, maxbytes)
 		if nbytes < 0 {
 			free(buf)
-			return 0, []u8{len: 0}, sp.get_error(nbytes)
+			return 0, []u8{len: 0}, sp.error(nbytes)
 		}
 		buf[nbytes] = 0
 		return nbytes, buf.vbytes(nbytes), ReturnStatus.okay
@@ -372,8 +367,8 @@ pub fn (mut sp SerialPort)read(maxbytes int) (int, []u8, ReturnStatus){
 // read converts received bytes to a sting and returns:
 // number of recieved bytes (0 if no data received),
 // received string and the enum type of ReturnStatus.
-pub fn (mut sp SerialPort)read_string() (int, string, ReturnStatus) {
-	ncount, buffer, rc := sp.read(max_read_buffer)
+pub fn (mut sp SerialPort) read_string() (int, string, ReturnStatus) {
+	ncount, buffer, rc := sp.read(vserialx.max_read_buffer)
 
 	mut rx_str := ''
 	if ncount > 0 {
@@ -386,54 +381,54 @@ pub fn (mut sp SerialPort)read_string() (int, string, ReturnStatus) {
 // write_string sends a string and
 // returns number of bytes that are sent and
 // enum type from ReturnStatus.
-pub fn (mut sp SerialPort)write_string(package string) (u32, ReturnStatus){
+pub fn (mut sp SerialPort) write_string(package string) (u32, ReturnStatus) {
 	rc := int(C.write(sp.fd, package.str, usize(package.len)))
-	
+
 	if rc > 0 {
 		return u32(rc), ReturnStatus.okay
 	}
 
-	error := sp.get_error(rc)
+	error := sp.error(rc)
 	return 0, error
 }
 
 // write sends a byte array.
 // Returns: number of written data and
 // enum type from ReturnStatus.
-pub fn (mut sp SerialPort)write(package []byte) (u32, ReturnStatus){
+pub fn (mut sp SerialPort) write(package []u8) (u32, ReturnStatus) {
 	rc := int(C.write(sp.fd, voidptr(&package[0]), usize(package.len)))
-	
+
 	if rc > 0 {
 		return u32(rc), ReturnStatus.okay
 	}
 
-	error := sp.get_error(rc)
+	error := sp.error(rc)
 	return 0, error
 }
 
-// flush_write removes received unread data
+// flush_in flushes received unread data
 // Returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort)flush_read() ReturnStatus{
+pub fn (mut sp SerialPort) flush_in() ReturnStatus {
 	rc := C.tcflush(sp.fd, C.TCIFLUSH)
-	return sp.get_error(rc)
+	return sp.error(rc)
 }
 
-// flush_write removes written data that are not sent.
+// flash_out removes written data that are not sent.
 // Returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort)flush_write_string() ReturnStatus {
+pub fn (mut sp SerialPort) flash_out() ReturnStatus {
 	rc := C.tcflush(sp.fd, C.TCOFLUSH)
-	return sp.get_error(rc)
+	return sp.error(rc)
 }
 
 // flush removes both written data that are not sent and
 // received unread data, and returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort)flush() ReturnStatus{
+pub fn (mut sp SerialPort) flush() ReturnStatus {
 	rc := C.tcflush(sp.fd, C.TCIOFLUSH)
-	return sp.get_error(rc)
+	return sp.error(rc)
 }
 
-pub fn (mut sp SerialPort)get_error(error_code int) ReturnStatus {
-	return match  error_code {
+pub fn (mut sp SerialPort) error(error_code int) ReturnStatus {
+	return match error_code {
 		C.EBADF {
 			ReturnStatus.error_bad_file_descriptor
 		}
@@ -471,36 +466,35 @@ pub fn (mut sp SerialPort)get_error(error_code int) ReturnStatus {
 }
 
 // unlock_access acquires exclusive access of sp serial port.
-pub fn (mut sp SerialPort)lock_access() {
+pub fn (mut sp SerialPort) lock_access() {
 	sp.lock_port = true
-	C.ioctl(sp.fd, C.TIOCEXCL,  0)
+	C.ioctl(sp.fd, C.TIOCEXCL, 0)
 }
 
 // unlock_access removes exclusive access of sp serial port.
-pub fn (mut sp SerialPort)unlock_access() {
+pub fn (mut sp SerialPort) unlock_access() {
 	sp.lock_port = false
-	C.ioctl(sp.fd, C.TIOCGEXCL,  0)
+	C.ioctl(sp.fd, C.TIOCGEXCL, 0)
 }
 
 // is_locked checks if exclusive access is locked or not.
 // Returns boolean: true if it is locked, otherwise false.
-pub fn (mut sp SerialPort)is_locked() bool {
+pub fn (mut sp SerialPort) is_locked() bool {
 	return sp.lock_port
 }
 
-// get_baudrate reads actual (configured) baudrate.
+// baudrate reads actual (configured) baudrate.
 // Return baudrate in bits-per-seconds, or it returns
 // an error if it fails.
-pub fn (mut sp SerialPort)get_baudrate() !int {
+pub fn (mut sp SerialPort) baudrate() !int {
 	mut tx_baudrate := int(0)
 	mut rx_baudrate := int(0)
 	mut options := C.termios{}
 
-
 	rc := int(C.tcgetattr(sp.fd, &options))
-  	if rc != 0 {
+	if rc != 0 {
 		return error('Failed to get options.')
-    }
+	}
 
 	tx_baudrate = C.cfgetospeed(&options)
 	rx_baudrate = C.cfgetispeed(&options)
@@ -513,5 +507,5 @@ pub fn (mut sp SerialPort)get_baudrate() !int {
 		return error('Unknown baudrate.')
 	}
 
-	return c_baudrates[tx_baudrate]
+	return vserialx.c_baudrates[tx_baudrate]
 }
