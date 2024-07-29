@@ -71,7 +71,7 @@ pub enum Baudrate {
 const c_baudrates = [0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 7200,
 	14400, 19200, 28800, 38400]
 
-pub enum ReturnStatus {
+pub enum Status {
 	okay
 	error_not_tty
 	error_configuration_failed
@@ -89,6 +89,10 @@ pub enum ReturnStatus {
 	error_closed_pipe
 	error_no_address
 	error_is_disconnected
+}
+
+pub fn (s Status)is_okay() bool {
+	return bool(s == .okay)
 }
 
 pub enum Parity {
@@ -169,8 +173,8 @@ pub fn new(port_name string, baud_rate Baudrate, flow_control FlowControl, parit
 }
 
 // open the serial port and configure it (if it is able to open the port).
-// Returns enum of the type ReturnStatus.
-pub fn (mut sp SerialPort) open() ReturnStatus {
+// Returns enum of the type Status.
+pub fn (mut sp SerialPort) open() Status {
 	mut open_flag := u32(C.O_RDWR | C.O_NOCTTY)
 	if sp.io_blocking == false {
 		open_flag |= u32(C.O_NDELAY)
@@ -187,7 +191,7 @@ pub fn (mut sp SerialPort) open() ReturnStatus {
 	mut rc := C.isatty(sp.fd)
 	if rc != 1 {
 		sp.close()
-		return ReturnStatus.error_not_tty
+		return Status.error_not_tty
 	}
 
 	if sp.lock_port == true {
@@ -202,7 +206,7 @@ pub fn (mut sp SerialPort) open() ReturnStatus {
 	rc = int(C.tcgetattr(sp.fd, &options))
 	if rc != 0 {
 		sp.close()
-		return ReturnStatus.error_unknown
+		return Status.error_unknown
 	}
 
 	options.c_iflag |= u32((C.INPCK | C.ISTRIP))
@@ -236,7 +240,7 @@ pub fn (mut sp SerialPort) open() ReturnStatus {
 	C.cfsetospeed(&options, int(sp.baud_rate))
 	C.cfsetispeed(&options, int(sp.baud_rate))
 	if int(C.cfgetospeed(&options)) != int(sp.baud_rate) {
-		return ReturnStatus.error_baudrate_mismatch
+		return Status.error_baudrate_mismatch
 	}
 
 	// set CFLAG
@@ -310,16 +314,16 @@ pub fn (mut sp SerialPort) open() ReturnStatus {
 	rc = int(C.tcsetattr(sp.fd, C.TCSANOW, &options))
 	if rc != 0 {
 		sp.close()
-		return ReturnStatus.error_configuration_failed
+		return Status.error_configuration_failed
 	}
 
-	return ReturnStatus.okay
+	return Status.okay
 }
 
 // close the serial port.
-pub fn (mut sp SerialPort) close() ReturnStatus {
+pub fn (mut sp SerialPort) close() Status {
 	if sp.is_connected == false {
-		return ReturnStatus.error_is_disconnected
+		return Status.error_is_disconnected
 	}
 	return sp.error(C.close(sp.fd))
 }
@@ -349,8 +353,8 @@ pub fn (mut sp SerialPort) is_empty() bool {
 // read received bytes and returns:
 // number of received bytes (0 if no bytes avalable),
 // read buffer - an empty buffer if no data, or an array of received bytes
-// and the enum of type ReturnStatus.
-pub fn (mut sp SerialPort) read(maxbytes int) (int, []u8, ReturnStatus) {
+// and the enum of type Status.
+pub fn (mut sp SerialPort) read(maxbytes int) (int, []u8, Status) {
 	C.fcntl(sp.fd, C.F_SETFL, C.FNDELAY)
 	unsafe {
 		mut buf := malloc_noscan(maxbytes + 1)
@@ -360,14 +364,14 @@ pub fn (mut sp SerialPort) read(maxbytes int) (int, []u8, ReturnStatus) {
 			return 0, []u8{len: 0}, sp.error(nbytes)
 		}
 		buf[nbytes] = 0
-		return nbytes, buf.vbytes(nbytes), ReturnStatus.okay
+		return nbytes, buf.vbytes(nbytes), Status.okay
 	}
 }
 
 // read converts received bytes to a sting and returns:
 // number of recieved bytes (0 if no data received),
-// received string and the enum type of ReturnStatus.
-pub fn (mut sp SerialPort) read_string() (int, string, ReturnStatus) {
+// received string and the enum type of Status.
+pub fn (mut sp SerialPort) read_string() (int, string, Status) {
 	ncount, buffer, rc := sp.read(vserialx.max_read_buffer)
 
 	mut rx_str := ''
@@ -380,12 +384,12 @@ pub fn (mut sp SerialPort) read_string() (int, string, ReturnStatus) {
 
 // write_string sends a string and
 // returns number of bytes that are sent and
-// enum type from ReturnStatus.
-pub fn (mut sp SerialPort) write_string(package string) (u32, ReturnStatus) {
+// enum type from Status.
+pub fn (mut sp SerialPort) write_string(package string) (u32, Status) {
 	rc := int(C.write(sp.fd, package.str, usize(package.len)))
 
 	if rc > 0 {
-		return u32(rc), ReturnStatus.okay
+		return u32(rc), Status.okay
 	}
 
 	error := sp.error(rc)
@@ -394,12 +398,12 @@ pub fn (mut sp SerialPort) write_string(package string) (u32, ReturnStatus) {
 
 // write sends a byte array.
 // Returns: number of written data and
-// enum type from ReturnStatus.
-pub fn (mut sp SerialPort) write(package []u8) (u32, ReturnStatus) {
+// enum type from Status.
+pub fn (mut sp SerialPort) write(package []u8) (u32, Status) {
 	rc := int(C.write(sp.fd, voidptr(&package[0]), usize(package.len)))
 
 	if rc > 0 {
-		return u32(rc), ReturnStatus.okay
+		return u32(rc), Status.okay
 	}
 
 	error := sp.error(rc)
@@ -407,60 +411,60 @@ pub fn (mut sp SerialPort) write(package []u8) (u32, ReturnStatus) {
 }
 
 // flush_in flushes received unread data
-// Returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort) flush_in() ReturnStatus {
+// Returns enum type from Status.
+pub fn (mut sp SerialPort) flush_in() Status {
 	rc := C.tcflush(sp.fd, C.TCIFLUSH)
 	return sp.error(rc)
 }
 
 // flash_out removes written data that are not sent.
-// Returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort) flash_out() ReturnStatus {
+// Returns enum type from Status.
+pub fn (mut sp SerialPort) flash_out() Status {
 	rc := C.tcflush(sp.fd, C.TCOFLUSH)
 	return sp.error(rc)
 }
 
 // flush removes both written data that are not sent and
-// received unread data, and returns enum type from ReturnStatus.
-pub fn (mut sp SerialPort) flush() ReturnStatus {
+// received unread data, and returns enum type from Status.
+pub fn (mut sp SerialPort) flush() Status {
 	rc := C.tcflush(sp.fd, C.TCIOFLUSH)
 	return sp.error(rc)
 }
 
-pub fn (mut sp SerialPort) error(error_code int) ReturnStatus {
+pub fn (mut sp SerialPort) error(error_code int) Status {
 	return match error_code {
 		C.EBADF {
-			ReturnStatus.error_bad_file_descriptor
+			Status.error_bad_file_descriptor
 		}
 		C.EDESTADDRREQ {
-			ReturnStatus.error_no_address
+			Status.error_no_address
 		}
 		C.EFAULT {
-			ReturnStatus.error_buffer_fault
+			Status.error_buffer_fault
 		}
 		C.EFBIG {
-			ReturnStatus.error_buffer_overlimit
+			Status.error_buffer_overlimit
 		}
 		C.EINTR {
-			ReturnStatus.error_interrupted
+			Status.error_interrupted
 		}
 		C.EINVAL {
-			ReturnStatus.error_invalid_parameters
+			Status.error_invalid_parameters
 		}
 		C.EIO {
-			ReturnStatus.error_io
+			Status.error_io
 		}
 		C.ENOSPC {
-			ReturnStatus.error_no_space
+			Status.error_no_space
 		}
 		C.EPERM {
-			ReturnStatus.error_no_permission
+			Status.error_no_permission
 		}
 		C.EPIPE {
-			ReturnStatus.error_closed_pipe
+			Status.error_closed_pipe
 		}
 		else {
-			ReturnStatus.error_unknown
+			Status.error_unknown
 		}
 	}
 }
