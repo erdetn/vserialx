@@ -2,6 +2,10 @@
 
 module vserialx
 
+$if !linux {
+    $compile_error('Only Linux is supported.')
+}
+
 #include "fcntl.h"
 #include "stdio.h"
 #include "unistd.h"
